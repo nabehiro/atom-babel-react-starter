@@ -1,34 +1,35 @@
-var webpack = require("webpack");
-var WebpackDevServer = require('webpack-dev-server');
-var config = require("./webpack.config");
+var path = require('path');
+var express = require('express');
+var webpack = require('webpack');
+var config = require('./webpack.config.dev');
+var url = require('url')
+var proxy = require('proxy-middleware')
 
-var port = 3000
-var proxy = {
-  '/api/*': 'http://localhost:24273'
-}
+var app = express();
+var compiler = webpack(config);
 
-// config.entry results in [
-//   'webpack-dev-server/client?http://localhost:3000',
-//   'webpack/hot/dev-server',
-//   './src/main.js'
-// ]
-config.entry.unshift('webpack/hot/dev-server')
-config.entry.unshift(`webpack-dev-server/client?http://localhost:${port}`)
+app.use('/api', proxy(url.parse('http://localhost:24273/api')));
 
-config.plugins.unshift(new webpack.HotModuleReplacementPlugin())
-
-new WebpackDevServer(webpack(config), {
-  publicPath: config.output.publicPath,
-  historyApiFallback: true,
-  hot: true,
+app.use(require('webpack-dev-middleware')(compiler, {
   noInfo: true,
   stats: {
     colors: true
   },
-  proxy: proxy
-}).listen(port);
+  publicPath: config.output.publicPath
+}));
 
-console.log(`[webpack-dev-server] http://localhost:${port}`)
-for(var key in proxy) {
-  console.log(`[proxy] http://localhost:${port}${key} => ${proxy[key]}${key}`)
-}
+app.use(require('webpack-hot-middleware')(compiler));
+
+app.get('*', function(req, res) {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.listen(3000, 'localhost', function(err) {
+  if (err) {
+    console.log(err);
+    return;
+  }
+
+  console.log('Listening at http://localhost:3000');
+  console.log('Proxying http://localhost:3000/api => http://localhost:24273/api')
+});
